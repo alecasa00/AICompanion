@@ -1,0 +1,89 @@
+# AICompanion — UNCERTAINTIES
+
+[TODO]
+Elemento: Esp32 board model
+Stato: PARZIALMENTE CONFERMATO
+Perché è necessario: selezionare il target PlatformIO corretto per l'ESP32-S3
+Dove deve essere configurato: platformio.ini
+Valore placeholder: esp32-s3-devkitc-1
+Come verificarlo: documentazione ufficiale del board reale ricevuto in hardware
+
+[TODO]
+Elemento: Microfono I2S model and pinout
+Stato: MANCANTE
+Perché è necessario: collegamento I2S e configurazione del canale audio
+Dove deve essere configurato: docs/hardware.md e config file audio
+Valore placeholder: MICROPHONE_I2S_RX_PIN = TODO
+Come verificarlo: scheda microfono e datasheet ufficiale
+
+[TODO]
+Elemento: MAX98357A/amplicatore I2S pinout
+Stato: MANCANTE
+Perché è necessario: output audio verso speaker
+Dove deve essere configurato: docs/hardware.md e config file audio
+Valore placeholder: MAX98357A_BCLK_PIN = TODO, MAX98357A_LRCLK_PIN = TODO, MAX98357A_DOUT_PIN = TODO
+Come verificarlo: schematico hardware e datasheet ufficiale
+
+[TODO]
+Elemento: Wi-Fi SSID
+Stato: MANCANTE
+Perché è necessario: connessione a rete locale
+Dove deve essere configurato: secrets.h
+Valore placeholder: YOUR_WIFI_SSID
+Come verificarlo: configurazione locale della rete di test
+
+[TODO]
+Elemento: Wi-Fi password
+Stato: MANCANTE
+Perché è necessario: autenticazione Wi-Fi
+Dove deve essere configurato: secrets.h
+Valore placeholder: YOUR_WIFI_PASSWORD
+Come verificarlo: configurazione locale della rete di test
+
+[TODO]
+Elemento: Gemini API key
+Stato: MANCANTE
+Perché è necessario: autorizzazione a Gemini Live API
+Dove deve essere configurato: secrets.h
+Valore placeholder: YOUR_GEMINI_API_KEY
+Come verificarlo: documentazione ufficiale Google Gemini
+
+[TODO]
+Elemento: Endpoint WebSocket Gemini Live API
+Stato: MANCANTE
+Perché è necessario: connessione diretta client-to-server
+Dove deve essere configurato: gemini client config
+Valore placeholder: "wss://YOUR_GEMINI_LIVE_ENDPOINT"
+Come verificarlo: documentazione ufficiale Gemini Live API
+
+[TODO]
+Elemento: sample rate audio e formato PCM
+Stato: MANCANTE
+Perché è necessario: acquisizione e riproduzione del flusso audio
+Dove deve essere configurato: file audio config
+Valore placeholder: input 16000 Hz PCM 16-bit little-endian; output 24000 Hz PCM 16-bit little-endian
+Come verificarlo: documentazione ufficiale Gemini Live API e hardware del microfono
+
+[TODO]
+Elemento: codec audio supportato
+Stato: MANCANTE
+Perché è necessario: invio/ricezione corretta del flusso audio
+Dove deve essere configurato: file gemini protocol config
+Valore placeholder: PCM audio
+Come verificarlo: documentazione ufficiale Gemini Live API
+
+[TODO]
+Elemento: TLS certificate handling on ESP32-S3
+Stato: DA VERIFICARE SU HARDWARE/RETE
+Perché è necessario: connessione WSS sicura
+Dove deve essere configurato: WebSocket client configuration
+Valore placeholder: WebSocketsClient::beginSSL con validazione TLS della libreria
+Come verificarlo: documentazione della libreria WebSockets, certificati CA disponibili sull'ESP32-S3 e test WSS reale
+
+[TODO]
+Elemento: Gemini Live API authentication mode
+Stato: API key documentata per il prototipo; token effimero da valutare
+Perché è necessario: autenticazione della connessione WSS
+Dove deve essere configurato: secrets.h e gemini_client.cpp
+Valore placeholder: GEMINI_API_KEY non committata
+Come verificarlo: documentazione ufficiale Google Live API e requisiti di sicurezza del deployment
