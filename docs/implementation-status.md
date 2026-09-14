@@ -28,6 +28,7 @@ RC:0
 - Input audio configurato a 16 kHz, PCM 16-bit little-endian.
 - Output audio previsto a 24 kHz, PCM 16-bit little-endian.
 - Gestione di placeholder per secret e pin hardware.
+- Modulo OLED SSD1306 I2C per la visualizzazione del `SystemState`.
 - Registro delle incertezze in `UNCERTAINTIES.txt`.
 
 ## Mancante o non verificato
@@ -42,6 +43,7 @@ RC:0
 - Flash, monitor seriale e conversazione end-to-end non sono stati eseguiti su device.
 - Buffer thread-safe e task FreeRTOS dedicati non sono ancora implementati.
 - Board reale, modello microfono, pin I2S, alimentazione e schema elettrico sono ancora da confermare.
+- GPIO SDA/SCL, alimentazione e indirizzo del modulo OLED sono ancora da confermare su hardware reale.
 
 ## Configurazione locale
 
@@ -87,6 +89,13 @@ I GPIO non devono essere dedotti: vanno confermati dalla documentazione dei comp
 - Flash del firmware.
 - Verifica del messaggio `[BOOT]`.
 - Verifica dell'assenza di reset e watchdog.
+- Se collegato, verifica della visualizzazione di `BOOT` e delle successive transizioni sul display OLED.
+
+### Test 1a - OLED
+
+- Confermare VCC, GND, SDA e SCL sul modulo reale.
+- Verificare la risposta I2C a `0x3C`; provare `0x3D` se necessario.
+- Verificare la visualizzazione degli stati senza bloccare il boot quando l'OLED e scollegato.
 
 ### Test 2 - Wi-Fi
 

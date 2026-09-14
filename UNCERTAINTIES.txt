@@ -25,6 +25,30 @@ Valore placeholder: MAX98357A_BCLK_PIN = TODO, MAX98357A_LRCLK_PIN = TODO, MAX98
 Come verificarlo: schematico hardware e datasheet ufficiale
 
 [TODO]
+Elemento: OLED SSD1306 controller e variante del modulo
+Stato: PARZIALMENTE CONFERMATO
+Perché è necessario: verificare compatibilità del display 128x64 e tensione di alimentazione
+Dove deve essere configurato: platformio.ini e src/display/display_manager.cpp
+Valore placeholder: SSD1306 I2C 128x64, 0,96 inch
+Come verificarlo: modello stampato sul modulo e datasheet ufficiale
+
+[TODO]
+Elemento: OLED I2C pinout e indirizzo
+Stato: MANCANTE
+Perché è necessario: inizializzare il display sul bus corretto
+Dove deve essere configurato: src/config/config.h e docs/hardware.md
+Valore placeholder: SDA/SCL = TODO, indirizzo = 0x3C (alternativa 0x3D)
+Come verificarlo: schematico della board, datasheet del modulo e scansione I2C
+
+[TODO]
+Elemento: OLED I2C pull-up e alimentazione
+Stato: MANCANTE
+Perché è necessario: garantire livelli logici e comunicazione I2C affidabile
+Dove deve essere configurato: docs/hardware.md
+Valore placeholder: da verificare sul modulo OLED
+Come verificarlo: schematico del modulo e misurazione sul cablaggio reale
+
+[TODO]
 Elemento: Wi-Fi SSID
 Stato: MANCANTE
 Perché è necessario: connessione a rete locale

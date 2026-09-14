@@ -22,6 +22,11 @@ Implementato il punto di partenza del firmware:
 - placeholder per credenziali e incertezze hardware
 - client WebSocket WSS e messaggio di setup Gemini
 - invio dei chunk PCM del microfono quando l'I2S sara configurato
+- supporto opzionale a OLED SSD1306 I2C 128x64 per visualizzare il `SystemState`
+
+Per abilitare il display, configurare `OLED_SDA_PIN` e `OLED_SCL_PIN` in `src/config/config.h`.
+L'indirizzo predefinito e `0x3C`; alcuni moduli richiedono `0x3D`. Se il display non viene
+rilevato, il firmware continua a funzionare e mantiene il logging seriale.
 
 ## Struttura progetto
 

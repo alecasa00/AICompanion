@@ -4,6 +4,7 @@
 #include "audio/audio_output.h"
 #include "audio/audio_test.h"
 #include "config/config.h"
+#include "display/display_manager.h"
 #include "gemini/gemini_client.h"
 #include "wifi/wifi_manager.h"
 
@@ -24,11 +25,37 @@ static ai_companion::WifiManager gWifiManager;
 static ai_companion::AudioInput gAudioInput;
 static ai_companion::AudioOutput gAudioOutput;
 static ai_companion::GeminiClient gGeminiClient;
+static ai_companion::DisplayManager gDisplayManager;
 static bool gGeminiStartRequested = false;
 static int16_t gMicBuffer[128];
 static int16_t gToneBuffer[128];
 static unsigned long gLastAudioCheckMs = 0;
 static bool gTonePlaybackArmed = false;
+
+static const char* stateName(SystemState state) {
+  switch (state) {
+    case SystemState::BOOT:
+      return "BOOT";
+    case SystemState::CONNECTING_WIFI:
+      return "CONNECTING WIFI";
+    case SystemState::WIFI_CONNECTED:
+      return "WIFI CONNECTED";
+    case SystemState::CONNECTING_GEMINI:
+      return "CONNECTING GEMINI";
+    case SystemState::READY:
+      return "READY";
+    case SystemState::LISTENING:
+      return "LISTENING";
+    case SystemState::SPEAKING:
+      return "SPEAKING";
+    case SystemState::ERROR:
+      return "ERROR";
+    case SystemState::RECONNECTING:
+      return "RECONNECTING";
+    default:
+      return "UNKNOWN";
+  }
+}
 
 static void logState(const char* label) {
   Serial.printf("[%s] %s\n", label, label);
@@ -36,6 +63,7 @@ static void logState(const char* label) {
 
 static void setState(SystemState nextState) {
   gState = nextState;
+  gDisplayManager.showState(stateName(gState));
 
   switch (gState) {
     case SystemState::BOOT:
@@ -78,6 +106,8 @@ void setup() {
   Serial.println("AICompanion boot sequence");
   Serial.println("============================");
   setState(SystemState::BOOT);
+  gDisplayManager.begin();
+  gDisplayManager.showState(stateName(gState));
 
   gWifiManager.begin();
   if (gAudioInput.begin()) {
