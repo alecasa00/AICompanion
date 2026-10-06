@@ -20,6 +20,7 @@ enum class SystemState {
   RECONNECTING
 };
 
+// I moduli sono globali perché vengono inizializzati una volta e aggiornati nel loop Arduino.
 static SystemState gState = SystemState::BOOT;
 static ai_companion::WifiManager gWifiManager;
 static ai_companion::AudioInput gAudioInput;
@@ -32,6 +33,11 @@ static int16_t gToneBuffer[128];
 static unsigned long gLastAudioCheckMs = 0;
 static bool gTonePlaybackArmed = false;
 
+static void bootMarker(uint8_t marker) {
+  Serial.printf("[BOOT-%02u]\n", marker);
+}
+
+// Converte gli stati interni in etichette brevi, usate sia sul display sia nei log.
 static const char* stateName(SystemState state) {
   switch (state) {
     case SystemState::BOOT:
@@ -65,6 +71,7 @@ static void setState(SystemState nextState) {
   gState = nextState;
   gDisplayManager.showState(stateName(gState));
 
+  // Ogni transizione ha un messaggio dedicato per facilitare il debug via seriale.
   switch (gState) {
     case SystemState::BOOT:
       Serial.println("[BOOT] AICompanion starting");
@@ -110,11 +117,13 @@ void setup() {
   gDisplayManager.showState(stateName(gState));
 
   gWifiManager.begin();
+  // I moduli audio possono restare inattivi se i pin richiesti non sono configurati.
   if (gAudioInput.begin()) {
     Serial.println("[AUDIO] Input ready");
   }
   if (gAudioOutput.begin()) {
     Serial.println("[AUDIO] Output ready");
+    // Prepara un tono di prova ripetuto dal loop, utile per verificare l'uscita I2S.
     ai_companion::AudioTest::generateTone(gToneBuffer, sizeof(gToneBuffer) / sizeof(gToneBuffer[0]),
                                           AUDIO_OUTPUT_SAMPLE_RATE, 440.0f);
     gTonePlaybackArmed = true;
@@ -123,10 +132,12 @@ void setup() {
 }
 
 void loop() {
+  // I client di rete vengono aggiornati frequentemente per gestire eventi asincroni.
   gWifiManager.update();
   gGeminiClient.update();
 
   const unsigned long now = millis();
+  // Legge periodicamente blocchi PCM dal microfono e li inoltra alla sessione Gemini.
   if (gAudioInput.isInitialized() && now - gLastAudioCheckMs >= ai_companion::kAudioStreamCheckMs) {
     gLastAudioCheckMs = now;
     const size_t samplesRead = gAudioInput.read(gMicBuffer, sizeof(gMicBuffer) / sizeof(gMicBuffer[0]));
@@ -140,6 +151,7 @@ void loop() {
     gAudioOutput.write(gToneBuffer, sizeof(gToneBuffer) / sizeof(gToneBuffer[0]));
   }
 
+  // La macchina a stati avanza senza attendere le operazioni di rete.
   switch (gState) {
     case SystemState::BOOT:
       setState(SystemState::CONNECTING_WIFI);

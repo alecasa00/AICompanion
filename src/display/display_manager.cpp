@@ -10,11 +10,13 @@ DisplayManager::DisplayManager()
     : display_(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET_PIN) {}
 
 bool DisplayManager::begin() {
+  // Il display è opzionale: pin non configurati o periferica assente non bloccano il boot.
   if (OLED_SDA_PIN < 0 || OLED_SCL_PIN < 0) {
     Serial.println("[OLED] SDA/SCL pins are not configured");
     return false;
   }
 
+  // Usa i pin I2C definiti dal progetto, anziché quelli predefiniti della scheda.
   Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
   initialized_ = display_.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDRESS);
   if (!initialized_) {
@@ -35,6 +37,7 @@ void DisplayManager::showState(const char* stateName) {
     return;
   }
 
+  // Ridisegna l'intera schermata per evitare residui del testo dello stato precedente.
   display_.clearDisplay();
   display_.setCursor(0, 0);
   display_.println("AICompanion");

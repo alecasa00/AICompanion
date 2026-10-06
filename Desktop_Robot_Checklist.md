@@ -1,9 +1,15 @@
 # AI Desktop Robot — Project Checklist
 
+## Current project status — 2026-10-06
+
+This repository is the Demo V1 ESP32-S3 firmware, using a direct WebSocket connection to Gemini Live API. A separate backend is outside this demo's scope. Checkmarks below indicate code or documentation present in the repository; they do not imply successful testing on physical hardware. The firmware build was recorded as successful in `docs/implementation-status.md`, but Wi-Fi, OLED, I2S devices, WSS/TLS, and end-to-end voice conversation have not been verified on hardware.
+
+Current implementation includes PlatformIO/Arduino setup, Wi-Fi management, OLED state text, I2S microphone and speaker modules, a test tone, and a Gemini Live WebSocket client that sends setup and microphone PCM. Gemini audio output is not yet decoded and played through the speaker; interruption handling, confirmed session readiness, and hardware pin selection remain incomplete.
+
 ## Hardware
 
 ### Core
-- [ ] ESP32-S3 development board
+- [x] ESP32-S3 development board
 - [ ] ESP32-S3 variant with PSRAM
 - [ ] USB-C cable / power supply
 
@@ -45,16 +51,16 @@
 ## Firmware
 
 ### Basic system
-- [ ] ESP32-S3 firmware project
+- [x] ESP32-S3 firmware project (PlatformIO, Arduino framework)
 - [ ] Wi-Fi connection
-- [ ] Wi-Fi reconnection handling
-- [ ] Device configuration
-- [ ] Error handling
+- [x] Wi-Fi reconnection handling (implemented; hardware behavior unverified)
+- [x] Device configuration placeholders
+- [ ] Error handling (partial; see `docs/implementation-status.md`)
 - [ ] OTA firmware updates
 
 ### OLED / robot face
-- [ ] OLED initialization
-- [ ] Basic text rendering
+- [x] OLED initialization (implemented; hardware unverified)
+- [x] Basic text rendering for system state
 - [ ] Eye rendering
 - [ ] Eye blinking animation
 - [ ] Looking left / right
@@ -68,11 +74,11 @@
 - [ ] Sleeping state
 
 ### Audio
-- [ ] I2S microphone input
+- [x] I2S microphone input module (hardware unverified)
 - [ ] Audio buffering
 - [ ] Recording start / stop
-- [ ] Audio encoding
-- [ ] Speaker output via I2S
+- [x] Audio encoding for Gemini input (PCM to Base64; end-to-end unverified)
+- [x] Speaker output via I2S module and test tone (hardware unverified)
 - [ ] Volume control
 - [ ] Audio playback interruption handling
 
@@ -94,7 +100,7 @@
 
 ## AI / Cloud
 
-### Backend
+### Backend (outside Demo V1 scope)
 - [ ] Spring Boot backend
 - [ ] Device authentication
 - [ ] Device identification
@@ -114,7 +120,7 @@
 
 ### LLM
 - [ ] LLM provider integration
-- [ ] Gemini integration
+- [x] Gemini Live API client and setup message (implemented; WSS/session unverified)
 - [ ] Conversation prompt
 - [ ] System personality
 - [ ] Conversation history
@@ -249,7 +255,7 @@
 ## Development Milestones
 
 ### Milestone 1 — Electronics
-- [ ] ESP32-S3 running
+- [ ] ESP32-S3 running on physical hardware
 - [ ] OLED working
 - [ ] Microphone working
 - [ ] Speaker working
@@ -258,15 +264,13 @@
 
 ### Milestone 2 — Robot
 - [ ] Animated eyes
-- [ ] Audio recording
-- [ ] Audio playback
+- [ ] Audio recording verified on hardware
+- [ ] Gemini audio playback verified on hardware
 - [ ] Wi-Fi connectivity
 
 ### Milestone 3 — AI
-- [ ] Backend working
-- [ ] STT working
-- [ ] LLM working
-- [ ] TTS working
+- [ ] Gemini Live session verified
+- [ ] Gemini audio input and output verified
 - [ ] End-to-end voice conversation
 
 ### Milestone 4 — Personality

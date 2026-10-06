@@ -9,7 +9,9 @@ class WifiManager {
  public:
   WifiManager();
 
+  // Imposta la modalità station e avvia il primo tentativo di connessione.
   void begin();
+  // Controlla timeout e stato Wi-Fi senza bloccare il ciclo principale.
   void update();
   bool isConnected() const;
   String ipAddressString() const;

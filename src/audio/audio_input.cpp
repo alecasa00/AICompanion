@@ -7,11 +7,13 @@ namespace ai_companion {
 AudioInput::AudioInput() : port_(I2S_NUM_0), initialized_(false) {}
 
 bool AudioInput::begin() {
+  // Senza i tre collegamenti essenziali non si installa un driver parzialmente configurato.
   if (AUDIO_MIC_BCLK_PIN < 0 || AUDIO_MIC_WS_PIN < 0 || AUDIO_MIC_DATA_IN_PIN < 0) {
     Serial.println("[TODO] Microphone I2S pins not configured. See UNCERTAINTIES.txt and docs/hardware.md.");
     return false;
   }
 
+  // Imposta I2S master in sola ricezione; la configurazione audio arriva da config.h.
   i2s_config_t config = {
       .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
       .sample_rate = AUDIO_INPUT_SAMPLE_RATE,
@@ -35,6 +37,7 @@ bool AudioInput::begin() {
       .data_in_num = AUDIO_MIC_DATA_IN_PIN,
   };
 
+  // Prima si installa il driver, poi si associano i GPIO: in caso di errore si rimuove.
   esp_err_t err = i2s_driver_install(port_, &config, 0, nullptr);
   if (err != ESP_OK) {
     Serial.printf("[AUDIO] I2S install failed: %d\n", err);
@@ -62,8 +65,14 @@ size_t AudioInput::read(int16_t* buffer, size_t maxSamples) {
     return 0;
   }
 
+  // L'API I2S lavora in byte; l'interfaccia pubblica espone invece il numero di campioni.
   size_t bytesRead = 0;
-  i2s_read(port_, buffer, maxSamples * sizeof(int16_t), &bytesRead, portMAX_DELAY);
+  const esp_err_t err = i2s_read(port_, buffer, maxSamples * sizeof(int16_t), &bytesRead,
+                                 pdMS_TO_TICKS(ai_companion::kAudioIoTimeoutMs));
+  if (err != ESP_OK) {
+    Serial.printf("[AUDIO] Input read timeout/error: %d\n", err);
+    return 0;
+  }
   return bytesRead / sizeof(int16_t);
 }
 

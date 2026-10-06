@@ -15,11 +15,13 @@ GeminiClient::GeminiClient()
 }
 
 void GeminiClient::begin() {
+  // Blocca il tentativo iniziale quando è ancora presente il valore segnaposto.
   if (GEMINI_API_KEY[0] == '\0' || String(GEMINI_API_KEY) == "YOUR_GEMINI_API_KEY") {
     Serial.println("[WS] Gemini API key is not configured");
     return;
   }
 
+  // L'API usa un endpoint WebSocket bidirezionale autenticato tramite chiave API.
   const String path = String("/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=") +
                       GEMINI_API_KEY;
 
@@ -48,6 +50,7 @@ bool GeminiClient::sendAudio(const uint8_t* data, size_t length) {
     return false;
   }
 
+  // I campioni binari PCM vengono trasportati nel campo JSON come base64.
   const String encoded = base64::encode(data, length);
 
   DynamicJsonDocument message(1024 + encoded.length());
@@ -69,6 +72,7 @@ void GeminiClient::disconnect() {
 }
 
 void GeminiClient::handleWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
+  // La libreria WebSocket richiede un callback statico; instance_ inoltra l'evento all'oggetto.
   if (instance_ != nullptr) {
     instance_->onWebSocketEvent(type, payload, length);
   }
@@ -103,6 +107,7 @@ void GeminiClient::sendSetup() {
     return;
   }
 
+  // Informa il servizio del modello e richiede risposte vocali prima di inviare l'audio.
   DynamicJsonDocument setup(1024);
   JsonObject setupObject = setup["setup"].to<JsonObject>();
   setupObject["model"] = GEMINI_MODEL;
@@ -114,6 +119,7 @@ void GeminiClient::sendSetup() {
 
   String serialized;
   serializeJson(setup, serialized);
+  // setupSent_ evita invii duplicati durante la stessa connessione.
   if (webSocket_.sendTXT(serialized)) {
     setupSent_ = true;
     sessionReady_ = true;
@@ -122,6 +128,7 @@ void GeminiClient::sendSetup() {
 }
 
 void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
+  // Analizza solo i messaggi JSON testuali e ignora quelli non validi.
   DynamicJsonDocument message(8192);
   const DeserializationError error = deserializeJson(message, payload, length);
   if (error) {
@@ -129,6 +136,7 @@ void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
     return;
   }
 
+  // Registra la conferma esplicita del server che il setup della sessione è completo.
   if (message["setupComplete"].is<JsonObject>()) {
     sessionReady_ = true;
     Serial.println("[AI] Session initialized");

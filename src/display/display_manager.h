@@ -7,7 +7,9 @@ namespace ai_companion {
 class DisplayManager {
  public:
   DisplayManager();
+  // Inizializza il bus I2C e il display; il firmware può proseguire anche se fallisce.
   bool begin();
+  // Aggiorna la schermata con lo stato corrente del sistema.
   void showState(const char* stateName);
   bool isInitialized() const;
 

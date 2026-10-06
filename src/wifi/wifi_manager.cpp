@@ -26,6 +26,7 @@ void WifiManager::update() {
 
   const unsigned long now = millis();
 
+  // Al timeout termina il tentativo corrente e ne avvia uno nuovo.
   if (attemptInProgress_ && now - connectStartedAtMs_ > ai_companion::kWifiTimeoutMs) {
     Serial.println("[WIFI] Connection timed out");
     lastError_ = "CONNECTION_TIMEOUT";
@@ -35,6 +36,7 @@ void WifiManager::update() {
     return;
   }
 
+  // Se non c'è un tentativo attivo, controlla periodicamente se occorre riconnettersi.
   if (!attemptInProgress_ && now - lastStatusCheckMs_ > 1000) {
     lastStatusCheckMs_ = now;
     const wl_status_t status = WiFi.status();
@@ -54,6 +56,7 @@ void WifiManager::update() {
 }
 
 void WifiManager::connect() {
+  // Memorizza l'istante di avvio per poter misurare il timeout in update().
   attemptInProgress_ = true;
   connectStartedAtMs_ = millis();
   lastStatusCheckMs_ = connectStartedAtMs_;

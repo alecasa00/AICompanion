@@ -7,11 +7,13 @@ namespace ai_companion {
 AudioOutput::AudioOutput() : port_(I2S_NUM_1), initialized_(false) {}
 
 bool AudioOutput::begin() {
+  // Evita di avviare I2S TX se manca uno dei pin essenziali per l'amplificatore.
   if (AUDIO_SPK_BCLK_PIN < 0 || AUDIO_SPK_WS_PIN < 0 || AUDIO_SPK_DATA_OUT_PIN < 0) {
     Serial.println("[TODO] Speaker I2S pins not configured. See UNCERTAINTIES.txt and docs/hardware.md.");
     return false;
   }
 
+  // Configura il bus come master trasmittente con frequenza e formato definiti nel file config.
   i2s_config_t config = {
       .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
       .sample_rate = AUDIO_OUTPUT_SAMPLE_RATE,
@@ -35,6 +37,7 @@ bool AudioOutput::begin() {
       .data_in_num = I2S_PIN_NO_CHANGE,
   };
 
+  // Se l'assegnazione dei pin fallisce, rimuove il driver già installato.
   esp_err_t err = i2s_driver_install(port_, &config, 0, nullptr);
   if (err != ESP_OK) {
     Serial.printf("[AUDIO] I2S TX install failed: %d\n", err);
@@ -62,8 +65,14 @@ size_t AudioOutput::write(const int16_t* buffer, size_t sampleCount) {
     return 0;
   }
 
+  // L'API I2S usa byte; al chiamante viene restituito il numero di campioni scritti.
   size_t bytesWritten = 0;
-  i2s_write(port_, buffer, sampleCount * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+  const esp_err_t err = i2s_write(port_, buffer, sampleCount * sizeof(int16_t), &bytesWritten,
+                                  pdMS_TO_TICKS(ai_companion::kAudioIoTimeoutMs));
+  if (err != ESP_OK) {
+    Serial.printf("[AUDIO] Output write timeout/error: %d\n", err);
+    return 0;
+  }
   return bytesWritten / sizeof(int16_t);
 }
 

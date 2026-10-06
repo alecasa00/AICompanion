@@ -5,6 +5,7 @@
 #if __has_include("secrets.h")
   #include "secrets.h"
 #else
+  // Valori segnaposto: creare secrets.h localmente prima di connettersi a rete o API.
   #define WIFI_SSID "YOUR_WIFI_SSID"
   #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
   #define GEMINI_API_KEY "YOUR_GEMINI_API_KEY"
@@ -14,27 +15,27 @@
 // AUDIO - I2S
 // ============================================================
 
-// Shared I2S clock lines
+// Linee di clock I2S condivise tra microfono e amplificatore; verificare il cablaggio reale.
 #define AUDIO_MIC_BCLK_PIN 16
 #define AUDIO_MIC_WS_PIN   17
 
-// INMP441 microphone data
+// Dato digitale in ingresso dal microfono INMP441.
 #define AUDIO_MIC_DATA_IN_PIN 4
 
-// INMP441 does not require MCLK
+// L'INMP441 non usa MCLK.
 #define AUDIO_MIC_MCLK_PIN -1
 
 
-// MAX98357 amplifier
+// Linee dati e clock dirette all'amplificatore MAX98357.
 #define AUDIO_SPK_BCLK_PIN    16
 #define AUDIO_SPK_WS_PIN      17
 #define AUDIO_SPK_DATA_OUT_PIN 15
 
-// MAX98357 does not require MCLK
+// Il MAX98357 non usa MCLK.
 #define AUDIO_SPK_MCLK_PIN -1
 
 
-// Audio format
+// Formato dei flussi audio PCM per I2S.
 #define AUDIO_INPUT_SAMPLE_RATE 16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
@@ -74,9 +75,11 @@
 // ============================================================
 
 namespace ai_companion {
+// Timeout e intervalli condivisi dai moduli di rete e audio.
 constexpr uint32_t kSerialBaudRate = 115200;
 constexpr uint32_t kWifiTimeoutMs = 30000;
 constexpr uint32_t kGeminiTimeoutMs = 30000;
 constexpr uint32_t kAudioChunkFrames = 128;
 constexpr uint32_t kAudioStreamCheckMs = 250;
+constexpr uint32_t kAudioIoTimeoutMs = 100;
 }  // namespace ai_companion
