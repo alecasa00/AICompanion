@@ -46,11 +46,27 @@ secrets.example.h
 .gitignore
 ```
 
-## Configurazione iniziale
+## Configurazione iniziale e gestione sicura dei secret
 
-Prima di testare il firmware reale, creare un file locale `secrets.h` basato su `secrets.example.h` e inserire i valori corretti per la rete e per Gemini.
+Creare il file locale `secrets.h` partendo dal template:
 
-Non committare secret reali.
+```powershell
+Copy-Item secrets.example.h secrets.h
+```
+
+Inserire in `secrets.h` SSID, password Wi-Fi e chiave Gemini. Il file è escluso da Git. Non inserirlo mai con `git add -f` e non copiare credenziali nei log o nei documenti del progetto. `secrets.example.h` contiene solo placeholder e può essere versionato.
+
+Attivare il controllo automatico prima dei commit, una sola volta per questo repository:
+
+```powershell
+git config --local core.hooksPath .githooks
+```
+
+L'hook `pre-commit` controlla i file staged, blocca i file di credenziali e rileva alcuni formati comuni di chiavi e password senza stamparne i valori. Richiede Python 3. Dopo aver aggiunto un secret per errore allo staging, rimuoverlo con `git restore --staged <file>` e verificare la versione staged prima di riprovare.
+
+Il controllo è una protezione aggiuntiva, non un rilevatore universale: verificare sempre `git diff --cached` prima del commit e revocare/ruotare immediatamente qualsiasi credenziale già condivisa o committata.
+
+Poiché questa demo comunica direttamente con Gemini, la chiave viene incorporata nel firmware compilato e usata per aprire la connessione WebSocket. `secrets.h` evita di versionarla nel repository, ma non protegge la chiave da chi può leggere il firmware del dispositivo: usare una chiave dedicata e con restrizioni adeguate per i prototipi.
 
 ## Build
 

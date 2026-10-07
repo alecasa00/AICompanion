@@ -20,11 +20,23 @@ void WifiManager::begin() {
 }
 
 void WifiManager::update() {
-  if (connected_) {
+  const unsigned long now = millis();
+  const wl_status_t status = WiFi.status();
+
+  // Rileva la connessione anche mentre WiFi.begin() è ancora in corso.
+  // Se il collegamento cade in seguito, consente invece di avviare un nuovo tentativo.
+  if (status == WL_CONNECTED) {
+    if (!connected_) {
+      connected_ = true;
+      attemptInProgress_ = false;
+      lastError_ = "CONNECTED";
+      Serial.print("[WIFI] Connected: ");
+      Serial.println(WiFi.localIP());
+    }
     return;
   }
 
-  const unsigned long now = millis();
+  connected_ = false;
 
   // Al timeout termina il tentativo corrente e ne avvia uno nuovo.
   if (attemptInProgress_ && now - connectStartedAtMs_ > ai_companion::kWifiTimeoutMs) {
@@ -37,19 +49,11 @@ void WifiManager::update() {
   }
 
   // Se non c'è un tentativo attivo, controlla periodicamente se occorre riconnettersi.
-  if (!attemptInProgress_ && now - lastStatusCheckMs_ > 1000) {
+  if (now - lastStatusCheckMs_ > 1000) {
     lastStatusCheckMs_ = now;
-    const wl_status_t status = WiFi.status();
-    if (status == WL_CONNECTED) {
-      connected_ = true;
-      lastError_ = "CONNECTED";
-      Serial.print("[WIFI] Connected: ");
-      Serial.println(WiFi.localIP());
-      return;
-    }
 
-    if (status == WL_IDLE_STATUS || status == WL_NO_SSID_AVAIL || status == WL_CONNECT_FAILED ||
-        status == WL_DISCONNECTED) {
+    if (!attemptInProgress_ && (status == WL_IDLE_STATUS || status == WL_NO_SSID_AVAIL ||
+                                status == WL_CONNECT_FAILED || status == WL_DISCONNECTED)) {
       connect();
     }
   }

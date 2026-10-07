@@ -6,7 +6,8 @@ namespace ai_companion {
 
 class AudioTest {
  public:
-  static void generateTone(int16_t* buffer, size_t sampleCount, uint32_t sampleRate, float frequencyHz);
+  static void generateTone(int16_t* buffer, size_t sampleCount, uint32_t sampleRate, float frequencyHz,
+                           float amplitude = 0.06f);
 };
 
 }  // namespace ai_companion

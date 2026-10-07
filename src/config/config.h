@@ -4,10 +4,18 @@
 
 #if __has_include("secrets.h")
   #include "secrets.h"
-#else
-  // Valori segnaposto: creare secrets.h localmente prima di connettersi a rete o API.
+#elif __has_include("../../secrets.h")
+  #include "../../secrets.h"
+#endif
+
+// Fallback per compilazioni senza il file locale o con campi non definiti.
+#ifndef WIFI_SSID
   #define WIFI_SSID "YOUR_WIFI_SSID"
+#endif
+#ifndef WIFI_PASSWORD
   #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#endif
+#ifndef GEMINI_API_KEY
   #define GEMINI_API_KEY "YOUR_GEMINI_API_KEY"
 #endif
 

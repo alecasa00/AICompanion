@@ -24,7 +24,8 @@ bool AudioOutput::begin() {
       .dma_buf_count = 4,
       .dma_buf_len = 256,
       .use_apll = false,
-      .tx_desc_auto_clear = false,
+      // In caso di underrun svuota i buffer DMA invece di ripetere l'ultimo campione.
+      .tx_desc_auto_clear = true,
       .fixed_mclk = 0,
       .mclk_multiple = I2S_MCLK_MULTIPLE_DEFAULT,
       .bits_per_chan = I2S_BITS_PER_CHAN_DEFAULT};

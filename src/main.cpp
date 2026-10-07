@@ -29,9 +29,8 @@ static ai_companion::GeminiClient gGeminiClient;
 static ai_companion::DisplayManager gDisplayManager;
 static bool gGeminiStartRequested = false;
 static int16_t gMicBuffer[128];
-static int16_t gToneBuffer[128];
+static int16_t gNotificationBuffer[AUDIO_OUTPUT_SAMPLE_RATE / 20];
 static unsigned long gLastAudioCheckMs = 0;
-static bool gTonePlaybackArmed = false;
 
 static void bootMarker(uint8_t marker) {
   Serial.printf("[BOOT-%02u]\n", marker);
@@ -67,7 +66,21 @@ static void logState(const char* label) {
   Serial.printf("[%s] %s\n", label, label);
 }
 
+// Emette una notifica breve e attenuata una sola volta per transizione.
+static void playStateNotification() {
+  if (!gAudioOutput.isInitialized()) {
+    return;
+  }
+
+  ai_companion::AudioTest::generateTone(
+      gNotificationBuffer, sizeof(gNotificationBuffer) / sizeof(gNotificationBuffer[0]),
+      AUDIO_OUTPUT_SAMPLE_RATE, 880.0f, 0.06f);
+  gAudioOutput.write(gNotificationBuffer,
+                     sizeof(gNotificationBuffer) / sizeof(gNotificationBuffer[0]));
+}
+
 static void setState(SystemState nextState) {
+  const bool stateChanged = (nextState != gState);
   gState = nextState;
   gDisplayManager.showState(stateName(gState));
 
@@ -104,6 +117,10 @@ static void setState(SystemState nextState) {
       Serial.println("[STATE] Unknown state");
       break;
   }
+
+  if (stateChanged) {
+    playStateNotification();
+  }
 }
 
 void setup() {
@@ -123,10 +140,6 @@ void setup() {
   }
   if (gAudioOutput.begin()) {
     Serial.println("[AUDIO] Output ready");
-    // Prepara un tono di prova ripetuto dal loop, utile per verificare l'uscita I2S.
-    ai_companion::AudioTest::generateTone(gToneBuffer, sizeof(gToneBuffer) / sizeof(gToneBuffer[0]),
-                                          AUDIO_OUTPUT_SAMPLE_RATE, 440.0f);
-    gTonePlaybackArmed = true;
   }
   setState(SystemState::CONNECTING_WIFI);
 }
@@ -145,10 +158,6 @@ void loop() {
       Serial.printf("[AUDIO] Captured %zu samples from microphone\n", samplesRead);
       gGeminiClient.sendAudio(reinterpret_cast<const uint8_t*>(gMicBuffer), samplesRead * sizeof(int16_t));
     }
-  }
-
-  if (gTonePlaybackArmed && gAudioOutput.isInitialized()) {
-    gAudioOutput.write(gToneBuffer, sizeof(gToneBuffer) / sizeof(gToneBuffer[0]));
   }
 
   // La macchina a stati avanza senza attendere le operazioni di rete.

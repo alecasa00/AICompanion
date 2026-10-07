@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+hook_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+checker="$hook_dir/../scripts/check_staged_secrets.py"
+
+if command -v python >/dev/null 2>&1; then
+    exec python "$checker"
+elif command -v py >/dev/null 2>&1; then
+    exec py -3 "$checker"
+elif command -v python3 >/dev/null 2>&1; then
+    exec python3 "$checker"
+fi
+
+echo "Secret check requires Python 3; commit stopped." >&2
+exit 2
