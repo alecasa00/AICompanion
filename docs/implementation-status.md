@@ -33,9 +33,9 @@ RC:0
 
 ## Mancante o non verificato
 
-- Il PCM ricevuto da Gemini viene individuato, ma non ancora decodificato da Base64 e inviato a `AudioOutput`.
-- Lo stato `SPEAKING` non e ancora collegato realmente alla ricezione audio.
-- L'evento `interrupted` viene registrato, ma non svuota il buffer e non ferma il playback.
+- Il PCM ricevuto da Gemini viene decodificato da Base64 e scritto sull'uscita I2S a 24 kHz.
+- Lo stato `SPEAKING` segue la ricezione dei chunk audio.
+- L'evento `interrupted` svuota il buffer DMA I2S.
 - Il tono di test deve essere disattivato durante il test Gemini.
 - La sessione deve essere considerata pronta solo dopo la conferma `setupComplete`.
 - TLS/WSS non e stato testato su ESP32 reale.
@@ -62,14 +62,10 @@ pio device monitor -b 115200
 
 ## Piano di completamento software
 
-1. Decodificare Base64 da `inlineData`.
-2. Inserire i campioni ricevuti in un buffer output.
-3. Inviare il buffer a `AudioOutput` a 24 kHz.
-4. Collegare gli eventi audio agli stati `LISTENING` e `SPEAKING`.
-5. Fermare il playback e svuotare il buffer su `interrupted`.
-6. Gestire overflow, underflow, JSON invalido e allocazioni fallite.
-7. Disattivare il tono continuo durante l'uso di Gemini.
-8. Valutare task FreeRTOS e code audio dopo i primi test reali.
+1. Gestire overflow, underflow, JSON invalido e allocazioni fallite.
+2. Verificare su hardware il playback a 24 kHz e il comportamento su `interrupted`.
+3. Disattivare il tono continuo durante l'uso di Gemini.
+4. Valutare task FreeRTOS e code audio dopo i primi test reali.
 
 ## Prerequisiti hardware
 

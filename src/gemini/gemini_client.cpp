@@ -2,15 +2,66 @@
 
 #include <ArduinoJson.h>
 #include <base64.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "config/config.h"
 
 namespace ai_companion {
 
+namespace {
+
+int base64Value(char character) {
+  if (character >= 'A' && character <= 'Z') return character - 'A';
+  if (character >= 'a' && character <= 'z') return character - 'a' + 26;
+  if (character >= '0' && character <= '9') return character - '0' + 52;
+  if (character == '+') return 62;
+  if (character == '/') return 63;
+  return -1;
+}
+
+bool decodeBase64(const char* encoded, size_t encodedLength, uint8_t* decoded,
+                  size_t decodedCapacity, size_t& decodedLength) {
+  decodedLength = 0;
+  if (encoded == nullptr || encodedLength == 0 || encodedLength % 4 != 0) {
+    return false;
+  }
+
+  for (size_t i = 0; i < encodedLength; i += 4) {
+    const bool lastBlock = (i + 4 == encodedLength);
+    const int a = base64Value(encoded[i]);
+    const int b = base64Value(encoded[i + 1]);
+    const int c = encoded[i + 2] == '=' ? 0 : base64Value(encoded[i + 2]);
+    const int d = encoded[i + 3] == '=' ? 0 : base64Value(encoded[i + 3]);
+    const bool padC = encoded[i + 2] == '=';
+    const bool padD = encoded[i + 3] == '=';
+    if (a < 0 || b < 0 || c < 0 || d < 0 || (padC && !padD) ||
+        ((!lastBlock) && (padC || padD))) {
+      return false;
+    }
+
+    const size_t bytesInBlock = padC ? 1 : (padD ? 2 : 3);
+    if (decodedLength + bytesInBlock > decodedCapacity) {
+      return false;
+    }
+    const uint32_t bits = (static_cast<uint32_t>(a) << 18) |
+                          (static_cast<uint32_t>(b) << 12) |
+                          (static_cast<uint32_t>(c) << 6) |
+                          static_cast<uint32_t>(d);
+    decoded[decodedLength++] = static_cast<uint8_t>(bits >> 16);
+    if (bytesInBlock > 1) decoded[decodedLength++] = static_cast<uint8_t>(bits >> 8);
+    if (bytesInBlock > 2) decoded[decodedLength++] = static_cast<uint8_t>(bits);
+  }
+  return true;
+}
+
+}  // namespace
+
 GeminiClient* GeminiClient::instance_ = nullptr;
 
-GeminiClient::GeminiClient()
-    : connected_(false), sessionReady_(false), setupSent_(false) {
+GeminiClient::GeminiClient(AudioOutput& audioOutput)
+    : audioOutput_(audioOutput), connected_(false), sessionReady_(false), setupSent_(false),
+      responseActive_(false) {
   instance_ = this;
 }
 
@@ -45,6 +96,10 @@ bool GeminiClient::isSessionReady() const {
   return sessionReady_;
 }
 
+bool GeminiClient::isResponseActive() const {
+  return responseActive_;
+}
+
 bool GeminiClient::sendAudio(const uint8_t* data, size_t length) {
   if (!connected_ || !sessionReady_ || data == nullptr || length == 0) {
     return false;
@@ -59,6 +114,18 @@ bool GeminiClient::sendAudio(const uint8_t* data, size_t length) {
   audio["data"] = encoded;
   audio["mimeType"] = "audio/pcm;rate=16000";
 
+  String serialized;
+  serializeJson(message, serialized);
+  return webSocket_.sendTXT(serialized);
+}
+
+bool GeminiClient::endAudioStream() {
+  if (!connected_ || !sessionReady_) {
+    return false;
+  }
+
+  DynamicJsonDocument message(128);
+  message["realtimeInput"]["audioStreamEnd"] = true;
   String serialized;
   serializeJson(message, serialized);
   return webSocket_.sendTXT(serialized);
@@ -82,20 +149,44 @@ void GeminiClient::onWebSocketEvent(WStype_t type, uint8_t* payload, size_t leng
   switch (type) {
     case WStype_CONNECTED:
       connected_ = true;
-      Serial.println("[WS] Gemini connected");
+      Serial.printf("[WS] Gemini connected at %lu ms\n", millis());
       sendSetup();
       break;
     case WStype_DISCONNECTED:
       connected_ = false;
       sessionReady_ = false;
       setupSent_ = false;
-      Serial.println("[WS] Gemini disconnected");
+      responseActive_ = false;
+      if (payload != nullptr && length > 0) {
+        Serial.printf("[WS] Gemini disconnected at %lu ms: %.*s\n", millis(), static_cast<int>(length),
+                      reinterpret_cast<const char*>(payload));
+      } else {
+        Serial.printf("[WS] Gemini disconnected at %lu ms (no reason provided)\n", millis());
+      }
       break;
     case WStype_TEXT:
+      Serial.printf("[WS] Gemini text frame at %lu ms (%u bytes)\n", millis(),
+                    static_cast<unsigned int>(length));
       handleServerMessage(payload, length);
       break;
+    case WStype_BIN:
+      Serial.printf("[WS] Gemini binary frame at %lu ms (%u bytes)\n", millis(),
+                    static_cast<unsigned int>(length));
+      handleServerMessage(payload, length);
+      break;
+    case WStype_PING:
+      Serial.printf("[WS] Gemini ping at %lu ms\n", millis());
+      break;
+    case WStype_PONG:
+      Serial.printf("[WS] Gemini pong at %lu ms\n", millis());
+      break;
     case WStype_ERROR:
-      Serial.println("[WS] Gemini WebSocket error");
+      if (payload != nullptr && length > 0) {
+        Serial.printf("[WS] Gemini WebSocket error: %.*s\n", static_cast<int>(length),
+                      reinterpret_cast<const char*>(payload));
+      } else {
+        Serial.println("[WS] Gemini WebSocket error (no details provided)");
+      }
       break;
     default:
       break;
@@ -111,19 +202,17 @@ void GeminiClient::sendSetup() {
   DynamicJsonDocument setup(1024);
   JsonObject setupObject = setup["setup"].to<JsonObject>();
   setupObject["model"] = GEMINI_MODEL;
-  JsonArray responseModalities = setupObject["responseModalities"].to<JsonArray>();
+  JsonObject generationConfig = setupObject["generationConfig"].to<JsonObject>();
+  JsonArray responseModalities = generationConfig["responseModalities"].to<JsonArray>();
   responseModalities.add("AUDIO");
-  JsonObject systemInstruction = setupObject["systemInstruction"].to<JsonObject>();
-  JsonArray parts = systemInstruction["parts"].to<JsonArray>();
-  parts.add<JsonObject>()["text"] = "You are a helpful voice assistant.";
 
   String serialized;
   serializeJson(setup, serialized);
   // setupSent_ evita invii duplicati durante la stessa connessione.
   if (webSocket_.sendTXT(serialized)) {
     setupSent_ = true;
-    sessionReady_ = true;
-    Serial.println("[AI] Session setup sent");
+    sessionReady_ = false;
+    Serial.println("[AI] Session setup sent; waiting for setupComplete");
   }
 }
 
@@ -136,6 +225,23 @@ void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
     return;
   }
 
+  JsonObject usage = message["usageMetadata"].as<JsonObject>();
+  if (!usage.isNull()) {
+    Serial.printf("[AI] Usage: prompt=%u response=%u total=%u\n",
+                  static_cast<unsigned int>(usage["promptTokenCount"] | 0),
+                  static_cast<unsigned int>(usage["responseTokenCount"] | 0),
+                  static_cast<unsigned int>(usage["totalTokenCount"] | 0));
+  }
+
+  JsonObject apiError = message["error"].as<JsonObject>();
+  if (!apiError.isNull()) {
+    const char* status = apiError["status"] | "unknown";
+    const char* details = apiError["message"] | "No message provided";
+    Serial.printf("[WS] Gemini API error (%s, code %d): %.180s\n", status,
+                  apiError["code"] | 0, details);
+    return;
+  }
+
   // Registra la conferma esplicita del server che il setup della sessione è completo.
   if (message["setupComplete"].is<JsonObject>()) {
     sessionReady_ = true;
@@ -144,17 +250,49 @@ void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
 
   JsonObject serverContent = message["serverContent"].as<JsonObject>();
   if (!serverContent.isNull()) {
+    JsonArray parts = serverContent["modelTurn"]["parts"].as<JsonArray>();
+    Serial.printf("[AI] Server content: %u parts, turnComplete=%s, interrupted=%s\n",
+                  static_cast<unsigned int>(parts.size()),
+                  serverContent["turnComplete"].as<bool>() ? "true" : "false",
+                  serverContent["interrupted"].as<bool>() ? "true" : "false");
+
     if (serverContent["interrupted"].as<bool>()) {
+      responseActive_ = false;
+      audioOutput_.clear();
       Serial.println("[AI] Response interrupted");
     }
 
-    JsonArray parts = serverContent["modelTurn"]["parts"].as<JsonArray>();
     for (JsonObject part : parts) {
       const char* encodedAudio = part["inlineData"]["data"] | nullptr;
       if (encodedAudio != nullptr) {
-        Serial.printf("[AI] Received audio chunk (%u base64 chars)\n",
-                      static_cast<unsigned int>(strlen(encodedAudio)));
+        const size_t encodedLength = strlen(encodedAudio);
+        const size_t decodedCapacity = (encodedLength / 4) * 3;
+        uint8_t* decoded = static_cast<uint8_t*>(malloc(decodedCapacity));
+        size_t decodedLength = 0;
+        if (decoded == nullptr ||
+            !decodeBase64(encodedAudio, encodedLength, decoded, decodedCapacity, decodedLength)) {
+          Serial.println("[AI] Audio chunk Base64 decode failed");
+          free(decoded);
+          continue;
+        }
+
+        // Gemini invia PCM mono signed 16-bit little-endian a 24 kHz.
+        const size_t sampleCount = decodedLength / sizeof(int16_t);
+        if (sampleCount > 0 && audioOutput_.isInitialized()) {
+          responseActive_ = true;
+          const size_t written = audioOutput_.write(reinterpret_cast<const int16_t*>(decoded), sampleCount);
+          Serial.printf("[AI] Played audio chunk: %u/%u samples\n",
+                        static_cast<unsigned int>(written), static_cast<unsigned int>(sampleCount));
+        } else if (!audioOutput_.isInitialized()) {
+          Serial.println("[AI] Audio received but I2S output is unavailable");
+        }
+        free(decoded);
       }
+    }
+
+    if (serverContent["turnComplete"].as<bool>()) {
+      responseActive_ = false;
+      Serial.println("[AI] Response complete");
     }
   }
 }

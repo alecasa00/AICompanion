@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Adafruit_NeoPixel.h>
 
 #include "audio/audio_input.h"
 #include "audio/audio_output.h"
@@ -25,12 +26,22 @@ static SystemState gState = SystemState::BOOT;
 static ai_companion::WifiManager gWifiManager;
 static ai_companion::AudioInput gAudioInput;
 static ai_companion::AudioOutput gAudioOutput;
-static ai_companion::GeminiClient gGeminiClient;
+static ai_companion::GeminiClient gGeminiClient(gAudioOutput);
 static ai_companion::DisplayManager gDisplayManager;
 static bool gGeminiStartRequested = false;
 static int16_t gMicBuffer[128];
 static int16_t gNotificationBuffer[AUDIO_OUTPUT_SAMPLE_RATE / 20];
-static unsigned long gLastAudioCheckMs = 0;
+static Adafruit_NeoPixel gBoardLedV10(1, BOARD_RGB_LED_PIN_V1_0, NEO_GRB + NEO_KHZ800);
+static Adafruit_NeoPixel gBoardLedV11(1, BOARD_RGB_LED_PIN_V1_1, NEO_GRB + NEO_KHZ800);
+static bool gPttButtonRawPressed = false;
+static bool gPttButtonPressed = false;
+static bool gPttRecording = false;
+static bool gPttUnavailableReported = false;
+static unsigned long gPttButtonChangedAtMs = 0;
+static unsigned long gPttStartedAtMs = 0;
+static size_t gPttSamplesSent = 0;
+static size_t gPttChunksSent = 0;
+static size_t gPttSendFailures = 0;
 
 static void bootMarker(uint8_t marker) {
   Serial.printf("[BOOT-%02u]\n", marker);
@@ -79,6 +90,62 @@ static void playStateNotification() {
                      sizeof(gNotificationBuffer) / sizeof(gNotificationBuffer[0]));
 }
 
+static void setMicrophoneLed(bool recording) {
+  const uint32_t colorV10 = recording ? gBoardLedV10.Color(255, 0, 0) : 0;
+  const uint32_t colorV11 = recording ? gBoardLedV11.Color(255, 0, 0) : 0;
+  gBoardLedV10.setPixelColor(0, colorV10);
+  gBoardLedV11.setPixelColor(0, colorV11);
+  gBoardLedV10.show();
+  gBoardLedV11.show();
+}
+
+static void updatePushToTalk(unsigned long now) {
+  const bool rawPressed = (digitalRead(BUTTON_PIN) == LOW);
+  if (rawPressed != gPttButtonRawPressed) {
+    gPttButtonRawPressed = rawPressed;
+    gPttButtonChangedAtMs = now;
+  }
+
+  if (now - gPttButtonChangedAtMs >= 30 && gPttButtonPressed != gPttButtonRawPressed) {
+    gPttButtonPressed = gPttButtonRawPressed;
+  }
+
+  const bool shouldRecord = gPttButtonPressed && gAudioInput.isInitialized();
+  if (gPttButtonPressed && !gAudioInput.isInitialized() && !gPttUnavailableReported) {
+    Serial.println("[PTT] Microphone is not initialized");
+    gPttUnavailableReported = true;
+  } else if (!gPttButtonPressed) {
+    gPttUnavailableReported = false;
+  }
+  if (shouldRecord == gPttRecording) {
+    return;
+  }
+
+  gPttRecording = shouldRecord;
+  setMicrophoneLed(gPttRecording);
+  if (gPttRecording) {
+    gPttStartedAtMs = now;
+    gPttSamplesSent = 0;
+    gPttChunksSent = 0;
+    gPttSendFailures = 0;
+    gDisplayManager.showState("RECORDING");
+    Serial.println("[PTT] Recording started");
+    if (!gGeminiClient.isSessionReady()) {
+      Serial.println("[PTT] Gemini session unavailable; audio will not be sent yet");
+    }
+  } else {
+    gDisplayManager.showState(stateName(gState));
+    bool streamEnded = false;
+    if (gGeminiClient.isSessionReady()) {
+      streamEnded = gGeminiClient.endAudioStream();
+    }
+    Serial.printf("[PTT] Recording stopped: %lu ms, %u samples, %u chunks sent, %u send failures, audioStreamEnd=%s\n",
+                  now - gPttStartedAtMs, static_cast<unsigned int>(gPttSamplesSent),
+                  static_cast<unsigned int>(gPttChunksSent),
+                  static_cast<unsigned int>(gPttSendFailures), streamEnded ? "ok" : "failed");
+  }
+}
+
 static void setState(SystemState nextState) {
   const bool stateChanged = (nextState != gState);
   gState = nextState;
@@ -118,7 +185,7 @@ static void setState(SystemState nextState) {
       break;
   }
 
-  if (stateChanged) {
+  if (stateChanged && gState != SystemState::LISTENING && gState != SystemState::SPEAKING) {
     playStateNotification();
   }
 }
@@ -129,6 +196,15 @@ void setup() {
   Serial.println("\n============================");
   Serial.println("AICompanion boot sequence");
   Serial.println("============================");
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  gPttButtonRawPressed = (digitalRead(BUTTON_PIN) == LOW);
+  gPttButtonPressed = gPttButtonRawPressed;
+  gPttButtonChangedAtMs = millis();
+  gBoardLedV10.begin();
+  gBoardLedV11.begin();
+  gBoardLedV10.setBrightness(BOARD_RGB_LED_BRIGHTNESS);
+  gBoardLedV11.setBrightness(BOARD_RGB_LED_BRIGHTNESS);
+  setMicrophoneLed(false);
   setState(SystemState::BOOT);
   gDisplayManager.begin();
   gDisplayManager.showState(stateName(gState));
@@ -150,13 +226,18 @@ void loop() {
   gGeminiClient.update();
 
   const unsigned long now = millis();
-  // Legge periodicamente blocchi PCM dal microfono e li inoltra alla sessione Gemini.
-  if (gAudioInput.isInitialized() && now - gLastAudioCheckMs >= ai_companion::kAudioStreamCheckMs) {
-    gLastAudioCheckMs = now;
+  updatePushToTalk(now);
+
+  // Il microfono viene letto e inviato soltanto mentre il pulsante PTT è premuto.
+  if (gPttRecording) {
     const size_t samplesRead = gAudioInput.read(gMicBuffer, sizeof(gMicBuffer) / sizeof(gMicBuffer[0]));
-    if (samplesRead > 0) {
-      Serial.printf("[AUDIO] Captured %zu samples from microphone\n", samplesRead);
-      gGeminiClient.sendAudio(reinterpret_cast<const uint8_t*>(gMicBuffer), samplesRead * sizeof(int16_t));
+    if (samplesRead > 0 && gGeminiClient.isSessionReady()) {
+      if (gGeminiClient.sendAudio(reinterpret_cast<const uint8_t*>(gMicBuffer), samplesRead * sizeof(int16_t))) {
+        gPttSamplesSent += samplesRead;
+        ++gPttChunksSent;
+      } else {
+        ++gPttSendFailures;
+      }
     }
   }
 
@@ -186,8 +267,14 @@ void loop() {
       setState(SystemState::LISTENING);
       break;
     case SystemState::LISTENING:
+      if (gGeminiClient.isResponseActive()) {
+        setState(SystemState::SPEAKING);
+      }
       break;
     case SystemState::SPEAKING:
+      if (!gGeminiClient.isResponseActive()) {
+        setState(SystemState::LISTENING);
+      }
       break;
     case SystemState::ERROR:
       setState(SystemState::RECONNECTING);
@@ -201,5 +288,5 @@ void loop() {
       break;
   }
 
-  delay(1000);
+  delay(1);
 }

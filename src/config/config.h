@@ -56,7 +56,7 @@
 // GEMINI
 // ============================================================
 
-#define GEMINI_MODEL "models/gemini-3.1-flash-live-preview"
+#define GEMINI_MODEL "models/gemini-3.8-live"
 
 
 // ============================================================
@@ -78,6 +78,9 @@
 // BUTTON
 // ============================================================
 #define BUTTON_PIN 5
+#define BOARD_RGB_LED_PIN_V1_0 48
+#define BOARD_RGB_LED_PIN_V1_1 38
+#define BOARD_RGB_LED_BRIGHTNESS 12
 // ============================================================
 // APPLICATION
 // ============================================================

@@ -77,6 +77,12 @@ size_t AudioOutput::write(const int16_t* buffer, size_t sampleCount) {
   return bytesWritten / sizeof(int16_t);
 }
 
+void AudioOutput::clear() {
+  if (initialized_) {
+    i2s_zero_dma_buffer(port_);
+  }
+}
+
 void AudioOutput::stop() {
   if (initialized_) {
     i2s_stop(port_);
