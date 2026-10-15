@@ -23,9 +23,9 @@
 // AUDIO - I2S
 // ============================================================
 
-// Linee di clock I2S condivise tra microfono e amplificatore; verificare il cablaggio reale.
-#define AUDIO_MIC_BCLK_PIN 16
-#define AUDIO_MIC_WS_PIN   17
+// Clock RX dedicati: i due driver I2S sono master e lavorano a frequenze diverse.
+#define AUDIO_MIC_BCLK_PIN 18
+#define AUDIO_MIC_WS_PIN   19
 
 // Dato digitale in ingresso dal microfono INMP441.
 #define AUDIO_MIC_DATA_IN_PIN 4
@@ -47,7 +47,8 @@
 #define AUDIO_INPUT_SAMPLE_RATE 16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
-#define AUDIO_BITS_PER_SAMPLE I2S_BITS_PER_SAMPLE_16BIT
+#define AUDIO_INPUT_BITS_PER_SAMPLE I2S_BITS_PER_SAMPLE_32BIT
+#define AUDIO_OUTPUT_BITS_PER_SAMPLE I2S_BITS_PER_SAMPLE_16BIT
 
 #define AUDIO_CHANNELS 1
 
@@ -90,7 +91,8 @@ namespace ai_companion {
 constexpr uint32_t kSerialBaudRate = 115200;
 constexpr uint32_t kWifiTimeoutMs = 30000;
 constexpr uint32_t kGeminiTimeoutMs = 30000;
-constexpr uint32_t kAudioChunkFrames = 128;
+// 512 campioni a 16 kHz = 32 ms per frame audio inviato a Gemini.
+constexpr uint32_t kAudioChunkFrames = 512;
 constexpr uint32_t kAudioStreamCheckMs = 250;
 constexpr uint32_t kAudioIoTimeoutMs = 100;
 }  // namespace ai_companion

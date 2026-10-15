@@ -165,12 +165,12 @@ void GeminiClient::onWebSocketEvent(WStype_t type, uint8_t* payload, size_t leng
       }
       break;
     case WStype_TEXT:
-      Serial.printf("[WS] Gemini text frame at %lu ms (%u bytes)\n", millis(),
+      Serial.printf("[WS] Gemini RX text frame at %lu ms (%u bytes)\n", millis(),
                     static_cast<unsigned int>(length));
       handleServerMessage(payload, length);
       break;
     case WStype_BIN:
-      Serial.printf("[WS] Gemini binary frame at %lu ms (%u bytes)\n", millis(),
+      Serial.printf("[WS] Gemini RX binary frame at %lu ms (%u bytes)\n", millis(),
                     static_cast<unsigned int>(length));
       handleServerMessage(payload, length);
       break;
@@ -205,6 +205,8 @@ void GeminiClient::sendSetup() {
   JsonObject generationConfig = setupObject["generationConfig"].to<JsonObject>();
   JsonArray responseModalities = generationConfig["responseModalities"].to<JsonArray>();
   responseModalities.add("AUDIO");
+  setupObject["inputAudioTranscription"].to<JsonObject>();
+  setupObject["outputAudioTranscription"].to<JsonObject>();
 
   String serialized;
   serializeJson(setup, serialized);
@@ -221,9 +223,13 @@ void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
   DynamicJsonDocument message(8192);
   const DeserializationError error = deserializeJson(message, payload, length);
   if (error) {
-    Serial.println("[WS] Invalid Gemini JSON message");
+    Serial.printf("[WS] Gemini RX JSON parse failed (%s, %u bytes, doc capacity %u)\n",
+                  error.c_str(), static_cast<unsigned int>(length),
+                  static_cast<unsigned int>(message.capacity()));
     return;
   }
+
+  Serial.printf("[WS] Gemini RX JSON parsed (%u bytes)\n", static_cast<unsigned int>(length));
 
   JsonObject usage = message["usageMetadata"].as<JsonObject>();
   if (!usage.isNull()) {
@@ -250,6 +256,17 @@ void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
 
   JsonObject serverContent = message["serverContent"].as<JsonObject>();
   if (!serverContent.isNull()) {
+    const char* inputTranscript = serverContent["inputTranscription"]["text"] | nullptr;
+    if (inputTranscript != nullptr) {
+      Serial.printf("[AI] Input transcription received (%u characters)\n",
+                    static_cast<unsigned int>(strlen(inputTranscript)));
+    }
+    const char* outputTranscript = serverContent["outputTranscription"]["text"] | nullptr;
+    if (outputTranscript != nullptr) {
+      Serial.printf("[AI] Output transcription received (%u characters)\n",
+                    static_cast<unsigned int>(strlen(outputTranscript)));
+    }
+
     JsonArray parts = serverContent["modelTurn"]["parts"].as<JsonArray>();
     Serial.printf("[AI] Server content: %u parts, turnComplete=%s, interrupted=%s\n",
                   static_cast<unsigned int>(parts.size()),
@@ -262,10 +279,20 @@ void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
       Serial.println("[AI] Response interrupted");
     }
 
+    size_t audioChunks = 0;
+    size_t encodedAudioBytes = 0;
+    size_t decodedAudioBytes = 0;
+    size_t writtenAudioSamples = 0;
     for (JsonObject part : parts) {
-      const char* encodedAudio = part["inlineData"]["data"] | nullptr;
+      JsonObject inlineData = part["inlineData"].as<JsonObject>();
+      const char* mimeType = inlineData["mimeType"] | "(missing)";
+      const char* encodedAudio = inlineData["data"] | nullptr;
       if (encodedAudio != nullptr) {
         const size_t encodedLength = strlen(encodedAudio);
+        ++audioChunks;
+        encodedAudioBytes += encodedLength;
+        Serial.printf("[AI] Audio chunk received: mime=%s, base64=%u bytes\n", mimeType,
+                      static_cast<unsigned int>(encodedLength));
         const size_t decodedCapacity = (encodedLength / 4) * 3;
         uint8_t* decoded = static_cast<uint8_t*>(malloc(decodedCapacity));
         size_t decodedLength = 0;
@@ -277,17 +304,30 @@ void GeminiClient::handleServerMessage(const uint8_t* payload, size_t length) {
         }
 
         // Gemini invia PCM mono signed 16-bit little-endian a 24 kHz.
+        decodedAudioBytes += decodedLength;
         const size_t sampleCount = decodedLength / sizeof(int16_t);
         if (sampleCount > 0 && audioOutput_.isInitialized()) {
           responseActive_ = true;
           const size_t written = audioOutput_.write(reinterpret_cast<const int16_t*>(decoded), sampleCount);
-          Serial.printf("[AI] Played audio chunk: %u/%u samples\n",
+          writtenAudioSamples += written;
+          Serial.printf("[AI] I2S TX chunk: %u/%u samples written\n",
                         static_cast<unsigned int>(written), static_cast<unsigned int>(sampleCount));
         } else if (!audioOutput_.isInitialized()) {
           Serial.println("[AI] Audio received but I2S output is unavailable");
         }
         free(decoded);
       }
+    }
+
+    if (audioChunks > 0) {
+      Serial.printf("[AI] Audio routing summary: %u chunks, %u base64 bytes, %u PCM bytes, %u/%u samples to I2S\n",
+                    static_cast<unsigned int>(audioChunks),
+                    static_cast<unsigned int>(encodedAudioBytes),
+                    static_cast<unsigned int>(decodedAudioBytes),
+                    static_cast<unsigned int>(writtenAudioSamples),
+                    static_cast<unsigned int>(decodedAudioBytes / sizeof(int16_t)));
+    } else if (parts.size() > 0) {
+      Serial.println("[AI] Model parts received, but no inlineData.audio chunk was found");
     }
 
     if (serverContent["turnComplete"].as<bool>()) {

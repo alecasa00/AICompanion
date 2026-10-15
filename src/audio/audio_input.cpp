@@ -17,7 +17,8 @@ bool AudioInput::begin() {
   i2s_config_t config = {
       .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
       .sample_rate = AUDIO_INPUT_SAMPLE_RATE,
-      .bits_per_sample = AUDIO_BITS_PER_SAMPLE,
+      // INMP441 emette dati I2S a 24 bit in slot da 32 bit.
+      .bits_per_sample = AUDIO_INPUT_BITS_PER_SAMPLE,
       .channel_format = (AUDIO_CHANNELS == 1) ? I2S_CHANNEL_FMT_ONLY_LEFT : I2S_CHANNEL_FMT_RIGHT_LEFT,
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
@@ -66,14 +67,23 @@ size_t AudioInput::read(int16_t* buffer, size_t maxSamples) {
   }
 
   // L'API I2S lavora in byte; l'interfaccia pubblica espone invece il numero di campioni.
+  // La periferica INMP441 fornisce campioni a 24 bit allineati a sinistra in parole da 32 bit.
+  // Li convertiamo in PCM signed 16-bit little-endian per il formato Gemini.
+  constexpr size_t kMaxReadSamples = 512;
+  int32_t rawSamples[kMaxReadSamples];
+  const size_t requestedSamples = (maxSamples < kMaxReadSamples) ? maxSamples : kMaxReadSamples;
   size_t bytesRead = 0;
-  const esp_err_t err = i2s_read(port_, buffer, maxSamples * sizeof(int16_t), &bytesRead,
+  const esp_err_t err = i2s_read(port_, rawSamples, requestedSamples * sizeof(int32_t), &bytesRead,
                                  pdMS_TO_TICKS(ai_companion::kAudioIoTimeoutMs));
   if (err != ESP_OK) {
     Serial.printf("[AUDIO] Input read timeout/error: %d\n", err);
     return 0;
   }
-  return bytesRead / sizeof(int16_t);
+  const size_t samplesRead = bytesRead / sizeof(int32_t);
+  for (size_t i = 0; i < samplesRead; ++i) {
+    buffer[i] = static_cast<int16_t>(rawSamples[i] >> 16);
+  }
+  return samplesRead;
 }
 
 void AudioInput::stop() {

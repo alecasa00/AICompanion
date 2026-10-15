@@ -1,17 +1,10 @@
 # Stato implementazione e piano test
 
-Data verifica: 2026-09-11
+Data verifica: 2026-10-16
 
 ## Stato generale
 
-Il firmware PlatformIO per ESP32-S3 compila correttamente, ma la Demo V1 non e ancora verificata end-to-end su hardware reale.
-
-Build verificata:
-
-```text
-RC:0
-[SUCCESS]
-```
+Il firmware PlatformIO compila. Tutti i componenti hardware sono collegati e testati sul setup attuale e sembrano funzionare; la voce registrata si sente in loopback. La saldatura definitiva e rimandata finché non sarà verificata una risposta end-to-end da Gemini Live. La quota gratuita è quasi esaurita e nelle prove Gemini ha restituito errori di quota.
 
 ## Implementato
 
@@ -27,23 +20,21 @@ RC:0
 - Dipendenze WebSockets e ArduinoJson.
 - Input audio configurato a 16 kHz, PCM 16-bit little-endian.
 - Output audio previsto a 24 kHz, PCM 16-bit little-endian.
+- Configurazione I2S RX a 32 bit per INMP441 e conversione dei campioni a PCM 16-bit.
+- Buffer locale di loopback: riproduzione della registrazione dopo 2 secondi, con ricampionamento 16 -> 24 kHz, attenuazione e dissolvenze per il test sullo speaker.
+- Clock I2S del microfono separati da quelli dell'amplificatore: INMP441 SCK/WS su GPIO 18/19, MAX98357 BCLK/LRC su GPIO 16/17. La condivisione dei clock tra due periferiche master con frequenze diverse causava acquisizione distorta.
+- Loopback della voce verificato fisicamente dopo la separazione dei clock.
+- Log audio con campioni acquisiti/inviati, min/max, RMS e campioni vicini al full scale.
+- Log Gemini per connessione, `setupComplete`, frame ricevuti, errori e audio instradato all'uscita.
 - Gestione di placeholder per secret e pin hardware.
 - Modulo OLED SSD1306 I2C per la visualizzazione del `SystemState`.
 - Registro delle incertezze in `UNCERTAINTIES.txt`.
 
 ## Mancante o non verificato
 
-- Il PCM ricevuto da Gemini viene decodificato da Base64 e scritto sull'uscita I2S a 24 kHz.
-- Lo stato `SPEAKING` segue la ricezione dei chunk audio.
-- L'evento `interrupted` svuota il buffer DMA I2S.
-- Il tono di test deve essere disattivato durante il test Gemini.
-- La sessione deve essere considerata pronta solo dopo la conferma `setupComplete`.
-- TLS/WSS non e stato testato su ESP32 reale.
-- Wi-Fi, microfono, MAX98357A e speaker non sono stati testati fisicamente.
-- Flash, monitor seriale e conversazione end-to-end non sono stati eseguiti su device.
+- La risposta audio di Gemini e la conversazione end-to-end non sono ancora state verificate con successo.
+- Nelle prove Gemini il server ha chiuso la sessione con errore 1011 per quota/billing; il loopback locale funziona indipendentemente da Gemini.
 - Buffer thread-safe e task FreeRTOS dedicati non sono ancora implementati.
-- Board reale, modello microfono, pin I2S, alimentazione e schema elettrico sono ancora da confermare.
-- GPIO SDA/SCL, alimentazione e indirizzo del modulo OLED sono ancora da confermare su hardware reale.
 
 ## Configurazione locale
 
@@ -60,6 +51,10 @@ pio run
 pio device monitor -b 115200
 ```
 
+## TODO prossima sessione
+
+- Creare un metodo per impostare il volume dell'uscita audio, con livello configurabile e applicato sia al loopback sia all'audio ricevuto da Gemini.
+
 ## Piano di completamento software
 
 1. Gestire overflow, underflow, JSON invalido e allocazioni fallite.
@@ -67,21 +62,16 @@ pio device monitor -b 115200
 3. Disattivare il tono continuo durante l'uso di Gemini.
 4. Valutare task FreeRTOS e code audio dopo i primi test reali.
 
-## Prerequisiti hardware
+## Stato hardware
 
-- Modello esatto della board ESP32-S3.
-- Modello e datasheet del microfono I2S.
-- Modello e datasheet del modulo MAX98357A.
-- Pin BCLK, WS/LRCLK, DATA e MCLK eventualmente richiesto.
-- Alimentazione, massa comune e collegamento speaker 4 ohm / 3 W.
-- Porta seriale visibile dal computer.
-
-I GPIO non devono essere dedotti: vanno confermati dalla documentazione dei componenti e riportati in `docs/hardware.md` e `UNCERTAINTIES.txt`.
+- Componenti e collegamenti hardware sono stati provati sul setup attuale e sembrano funzionare, incluso il loopback microfono-speaker.
+- La saldatura definitiva è in attesa della conferma che Gemini riceva l'audio e risponda.
 
 ## Piano test incrementale
 
 ### Test 1 - Boot
 
+- Verificato: boot e toni diagnostici udibili, senza problemi rilevati.
 - Flash del firmware.
 - Verifica del messaggio `[BOOT]`.
 - Verifica dell'assenza di reset e watchdog.
@@ -89,6 +79,7 @@ I GPIO non devono essere dedotti: vanno confermati dalla documentazione dei comp
 
 ### Test 1a - OLED
 
+- Verificato sul setup hardware attuale.
 - Confermare VCC, GND, SDA e SCL sul modulo reale.
 - Verificare la risposta I2C a `0x3C`; provare `0x3D` se necessario.
 - Verificare la visualizzazione degli stati senza bloccare il boot quando l'OLED e scollegato.
@@ -101,12 +92,14 @@ I GPIO non devono essere dedotti: vanno confermati dalla documentazione dei comp
 
 ### Test 3 - Microfono
 
+- Verificato: registrazione e loopback vocale udibile dopo aver separato i clock I2S.
 - Configurazione dei GPIO confermati.
 - Verifica inizializzazione I2S RX.
 - Verifica presenza di campioni e assenza di overflow.
 
 ### Test 4 - Speaker
 
+- Verificato: toni diagnostici e loopback udibili dallo speaker.
 - Disabilitazione temporanea di Gemini.
 - Riproduzione di un tono breve a volume basso.
 - Verifica I2S TX, MAX98357A e speaker.
@@ -145,10 +138,10 @@ I GPIO non devono essere dedotti: vanno confermati dalla documentazione dei comp
 
 ## Criterio di completamento V1
 
-La V1 sara completata solo dopo la verifica fisica del percorso:
+La V1 sara completata solo dopo la verifica end-to-end del percorso:
 
 ```text
 Microfono -> ESP32-S3 -> WSS -> Gemini -> WSS -> ESP32-S3 -> MAX98357A -> Speaker
 ```
 
-Fino a quel momento lo stato corretto e: **compilata, ma non verificata su hardware**.
+Stato attuale: **hardware collegato e verificato sul setup attuale; loopback microfono-speaker funzionante; conversazione Gemini end-to-end da confermare prima della saldatura definitiva**.
